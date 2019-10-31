@@ -1,50 +1,51 @@
 #include "lib.h"
 
-int load_names(char **names, char *dir){
-
-     char /**names,*/ name[200], dir2[100];
-     int i, j, l=0, ll;//l must be set by length(dir)
-
-
-
+int load_names(char **names, char *dir, char *in_ras){
+     char name[200], dir2[100], *token;
+     int i, j, l=0, k;//l must be set by length(dir)
+     
+     
      strcpy(dir2, dir);
      strcat(dir2, "data/");
      strcpy(name, dir2);
+     //l=strlen(dir2);
      while (1) {
           if (dir2[l] == '\0') break;
           l++;
      }
-     ll=l;
-     strcat(name, "input_rasters_calib.txt");
+     
+     strcat(name, in_ras);
      FILE *file=fopen(name, "r");
      if(file==NULL) {printf("ERROR in file input rasters\n\n");
                     return 0;}
-     for(i=0; i<11; i++){
+     for(i=0; i<15; i++){
           if (!fgets(name, sizeof(name), file))
                break;
-		strcpy(names[i], dir2);
-		//if(i==9) {strcpy(names[i], dir2); ll=8;}
-
+          strcpy(names[i], dir2);
+          
           j=0;
           while (1) {
-               if (name[j] == '\n') break;
+               if (name[j] == '\n' || name[j]==' ') break;
                names[i][j+l] = name[j];
                j++;
           }
           names[i][j+l]='\0';
-	ll=l;
      }
      fclose(file);
-     //free(names);
+     
      return 1;
 }
 
 double** read_raster(char *name, double *ref_X){
      int nrows, ncols, i, j;
      FILE *file;
-     file = fopen(name, "r");
+     file=fopen(name, "r");
+     if (!file)
+        perror("fopen");
+     
      if (file == NULL){
         printf("ERROR FILE %s\n", name);
+        perror(name);
         exit(EXIT_FAILURE);
      }
 
@@ -52,7 +53,6 @@ double** read_raster(char *name, double *ref_X){
      int head=6;
      for(i=0; i<head; i++)
               ref_X[i] = read_head(file);
-
 
      //[ncols; nrows; xllcorner; yllcorner; cellsize; NODATA_value];
      ncols=ref_X[0];
@@ -65,41 +65,6 @@ double** read_raster(char *name, double *ref_X){
      for(i = 0; i < nrows; i++){
       for(j = 0; j < ncols; j++){
       if (!fscanf(file, "%lf", &X[i][j]))
-           break;
-      //if(abs(X[i][j])<1e-300) X[i][j]=0;
-      }
-     }
-
-  fclose(file);
-  return X;
-}
-
-int** read_raster_int(char *name, double *ref_X){
-     int nrows, ncols, i, j;
-     FILE *file;
-     file = fopen(name, "r");
-     if (file == NULL){
-        printf("ERROR FILE %s\n", name);
-        exit(EXIT_FAILURE);
-     }
-
-     //Read header:
-     int head=6;
-     for(i=0; i<head; i++)
-              ref_X[i] = read_head(file);
-
-
-     //[ncols; nrows; xllcorner; yllcorner; cellsize; NODATA_value];
-     ncols=ref_X[0];
-     nrows=ref_X[1];
-
-     int **X=(int**)malloc(nrows*sizeof(int*));
-     for(i=0;i<nrows;++i)
-     X[i]=(int*)malloc(ncols*sizeof(int));
-
-     for(i = 0; i < nrows; i++){
-      for(j = 0; j < ncols; j++){
-      if (!fscanf(file, "%ld", &X[i][j]))
            break;
       //if(abs(X[i][j])<1e-300) X[i][j]=0;
       }
@@ -163,6 +128,28 @@ void write_raster(char *name, double *ref_X, double **X){
   fclose(file);
 }
 
+void read_parameters(char *name, double *parameters, int *I){
+     int i=0;
+     double new_val;
+     FILE *file=fopen(name, "r");
+     if(file==NULL){
+          printf("ERROR FILE %s\n", name);
+        exit(EXIT_FAILURE);
+     }
+
+     while((new_val=read_head(file))!=-1){
+          //printf("i=%d %f\n", i, new_val);
+          parameters[i]=new_val;
+          i++;
+          if(i>12){
+               printf("Too many values in %s\n Stop reading\n\n", name);
+               break;
+          }
+     }
+     fclose(file);
+     *I=i;
+}
+
 void write_vector(char *name, double *X, int nrows){
      int i;
      FILE *file;
@@ -178,63 +165,4 @@ void write_vector(char *name, double *X, int nrows){
       }
 
   fclose(file);
-}
-
-void write_vector_int(char *name, int *X, int nrows){
-     int i;
-     FILE *file;
-     file = fopen(name, "w+");
-     if (file == NULL){
-        printf("ERROR FILE %s\n", name);
-        exit(EXIT_FAILURE);
-     }
-
-     for(i = 0; i < nrows; i++){
-       if (!fprintf(file, "%d\n", X[i]))
-           break;
-      }
-
-  fclose(file);
-}
-
-void write_vector2(char *name, double **X, int nrows, int ncols){
-     int i, j;
-     FILE *file;
-     file = fopen(name, "w+");
-     if (file == NULL){
-        printf("ERROR FILE %s\n", name);
-        exit(EXIT_FAILURE);
-     }
-
-     for(i = 0; i < nrows; i++){
-          for(j=0; j<ncols; j++){
-               if (!fprintf(file, "%.20g\t", X[i][j]))
-               break;
-          }
-          fprintf(file,"\n");
-      }
-
-  fclose(file);
-}
-
-void read_parameters(char *name, double *parameters, int *I){
-     int i=0;
-     double new_val;
-     FILE *file=fopen(name, "r");
-     if(file==NULL){
-          printf("ERROR FILE %s\n", name);
-        exit(EXIT_FAILURE);
-     }
-
-     while((new_val=read_head(file))!=-1){
-          //printf("i=%d %f\n", i, new_val);
-          parameters[i]=new_val;
-          i++;
-          if(i>11){
-               printf("Too many values in %s\n Stop reading\n\n", name);
-               break;
-          }
-     }
-     fclose(file);
-     *I=i;
 }

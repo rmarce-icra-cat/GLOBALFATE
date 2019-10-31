@@ -1,89 +1,93 @@
 /**
- GLOBFATE Model
- Authors: Carme Font, Francesco Bregoli and Rafa MarcÃ©
- Contact: cfont@icra.cat
+ GLOBAL-FATE Model
+ Authors: Carme Font, Francesco Bregoli and Rafa Marcé
+ Contact: cfont@icra.cat; rmarce@icra.cat
           Catalan Institute for Water Research (ICRA),
           Carrer Emili Grahit 101, 17003, Girona (Spain), Tel (+34) 972 18 33 80
           www.icra.cat
- Description:
- Last modification: dec 2017
+ Description: // The description will be supplied upon publication of the model in a peer-reviewed journal
+ Last modification: sep 2019
 **/
 
 #include "lib.h"
-
+/*
+void make_directory(const char* name) 
+   {
+   #ifdef __linux__
+       mkdir(name, 777); 
+   #else
+       _mkdir(name);
+   #endif
+   }
+*/
 int main(int argc, char *argv[]){
      /** Declaration of variables **/
      time_t time0, time1, time_i=time(NULL), time_e;
-     double ref_raster[6], ref_area[6], ref_runoff[6], ref_slope[6], ref_lake_label[6], ref_V[6], ref_consum[6],
-          ref_population[6], ref_trated[6], ref_nosewage[6];
+     double ref_raster[6]; //rasters' header
      double R = 6371007; // The authalic earth radius at equator
-     char name[200], P[10];
-     char dir[100]={"C:/Users/cfont/Documents/projectes/GLOBAQUA - Model/GLOBAL-FATE C/"};
-     int i, j, nl, save_all=1, num_lakes;
-     float P1, P2;
-     /** Raster's pointers **/
-     double **area, **direction, **runoff, **slope, **consum, **population, **lake_label, **V, **treated, **nosewage;
+     char name[200]; // auxiliary string
+     char dir[100]={'\0'}; // Change only if executable file is in a different directory than 'data' and 'results' folders
+     int i, j, nl, save_all=1, num_lakes; //indexes
+     
+     /** Rasters' pointers **/
+     double **area, **direction, **runoff, **slope, **consum, **population, **lake_label, **V, **treated;
      /** Rasters for new data **/
      double *area_m2, *cell_width, cell_height, **hierarchy, **vel, **RT, *Qmax, **C, **L0;
 
-     printf("Loading data...\n");
      /** Parameters from file **/
-     double *parameters=calloc(12, sizeof(double));// = {7.2, 0.5, 0.27, 0.39, 0.044};
-     int args;
+     printf("Loading data...\n");
+     double *parameters=calloc(12, sizeof(double));// vector with parameters' values
+     int args; 
      strcpy(name, dir);
      strcat(name, "data/input_parameters.txt");
-     read_parameters(name, parameters, &args);
-     if(args<10){
+     read_parameters(name, parameters, &args); //load parameters
+     if(args<10){ //check number of parameters loaded
           printf("Too few parameters\n");
           printf("Closing program...\n");
           return 0;
      }
-     save_all = parameters[7];
-     double e1=1, e2=1;
-     parameters[10]=e1;
-     parameters[11]=e2;
+     save_all = parameters[8]; //getting saving options
 
      /** loading raster's names **/
      char **names=(char**)malloc(11*sizeof(char*));
      for(i=0; i<11; i++) names[i]=(char*)malloc(200*sizeof(char));
-     if(load_names(names, dir)==0)
+     if(load_names(names, dir, "input_rasters.txt")==0)
           return 0;
 
+
+     /* loading 'basic' rasters */
      #pragma omp parallel sections
      {
      #pragma omp section
-          area = read_raster(names[0], ref_area);
+          area = read_raster(names[0], ref_raster);
      #pragma omp section
           direction = read_raster(names[1], ref_raster);
      }
      /** Parameters from raster's header **/
-     int ncols = ref_raster[0];         //number of columns available in ascii grid header
-     int nrows = ref_raster[1];         //number of rows available in ascii grid header
-     double yllcorner = ref_raster[3];  //in decimal degrees available in ascii grid header
-     double resolution=ref_raster[4];   //in decimal degrees available in ascii grid header
-     //nan_unif(nrows, ncols, area, direction, slope, consum, population, wwtp_connection);
+     int ncols = ref_raster[0];         //number of columns available in ascii grid raster
+     int nrows = ref_raster[1];         //number of rows available in ascii grid raster
+     double yllcorner = ref_raster[3];  //wetern coordinate in ascii grid raster
+     double resolution=ref_raster[4];   //in decimal degrees available in ascii grid raster
 
+     //function to transform the matrix 'area' to a two column matrix to save memory
      hierarchy=hierarchy_area(area, nrows, ncols, &nl);
      for(i=0; i<nrows; i++) free(area[i]);//area no longer needed
 
      /** GEOGRAPHICAL RELATED PROCESSES **/
-     if(parameters[8]==1){
+     if(parameters[9]==1){
      printf("Running geographical related processes\n");
+     /* Loading raster for the geographical related processes */
      #pragma omp parallel sections
      {
      #pragma omp section
-          runoff = read_raster(names[2], ref_runoff);
+          runoff = read_raster(names[2], ref_raster);
      #pragma omp section
-          slope = read_raster(names[3], ref_slope);
+          slope = read_raster(names[3], ref_raster);
      #pragma omp section
-          lake_label = read_raster(names[4], ref_lake_label);
+          lake_label = read_raster(names[4], ref_raster);
      #pragma omp section
-          V = read_raster(names[5], ref_V);
+          V = read_raster(names[5], ref_raster);
      }
-
-     /*if(check_rasters(ref_raster, ref_direction, ref_runoff, ref_slope, ref_lake_label, ref_V, ref_consum,
-          ref_population, ref_connection)==0)
-          return 0;*/
 
      /** 1. running the area_m2 function **/
      printf("Running area m2...\n");
@@ -95,7 +99,7 @@ int main(int argc, char *argv[]){
      printf("Running flow accumulation...\n");
      Flow_accumulation_m2(direction,hierarchy,area_m2,runoff, nrows, ncols, nl);
 
-     /** 3. running the retention time function **/
+     /** 3. running the residence time function **/
      printf("Running residence time...\n");
      vel=(double**)calloc(nrows,sizeof(double*));
      RT=(double**)calloc(nrows,sizeof(double*));
@@ -112,20 +116,21 @@ int main(int argc, char *argv[]){
 
      if(save_all==1){
      printf("Saving partial results\n");
+     //make_directory("results");
      #pragma omp parallel sections
      {
           #pragma omp section
-          write_vector("results/width.txt", cell_width, nrows);
+          write_vector("results/width.txt", cell_width, nrows); //vector of raster's cells width
           #pragma omp section
-          write_vector("results/area_m2.txt", area_m2, nrows);
+          write_vector("results/area_m2.txt", area_m2, nrows); //vector raster's cells area
           #pragma omp section
-          write_vector("results/Qmax.txt", Qmax, num_lakes);
+          write_vector("results/Qmax.txt", Qmax, num_lakes); //vector of lakes' outlet
           #pragma omp section
-          write_raster("results/flow_acc.txt", ref_raster, runoff);
+          write_raster("results/flow_acc.txt", ref_raster, runoff); //raster of flow accumulation
           #pragma omp section
-          write_raster("results/vel.txt", ref_raster, vel);
+          write_raster("results/vel.txt", ref_raster, vel); //raster of flow velocity
           #pragma omp section
-          write_raster("results/RT.txt", ref_raster, RT);
+          write_raster("results/RT.txt", ref_raster, RT); //raster of residence time
      }}
 
      /** Free data **/
@@ -140,72 +145,40 @@ int main(int argc, char *argv[]){
 
      /** CONTAMINANT RELATED PROCESSES **/
      printf("Running contaminant related processes\n");
+     if(parameters[9]==0){ // If geographical processes are not run, then 'flow_acc' and 'RT' are taken from the results' folder
+        strcpy(names[9], dir);
+        strcat(names[9], "results/flow_acc.txt");
+        strcpy(names[10], dir);
+        strcat(names[10], "results/RT.txt");
+     }
+     
      #pragma omp parallel sections private(name)
      {
      #pragma omp section
-          {
-               strcpy(name, dir);
-               strcat(name, "results/flow_acc.txt");
-               //printf("flow acc name %s\n", name);
-               if(parameters[8]==0) runoff = read_raster(name, ref_runoff);
-          }
+          if(parameters[9]==0) runoff = read_raster(names[9], ref_raster);
      #pragma omp section
-     {
-          strcpy(name, dir);
-          strcat(name, "results/RT.txt");
-          //printf("RT name %s\n", name);
-          if(parameters[8]==0) RT = read_raster(name, ref_raster);
-     }
+          if(parameters[9]==0) RT = read_raster(names[10], ref_raster);
      #pragma omp section
-          consum = read_raster(names[6], ref_consum);
+          consum = read_raster(names[6], ref_raster);
      #pragma omp section
-          population = read_raster(names[7], ref_population);
+          population = read_raster(names[7], ref_raster);
      #pragma omp section
-          treated = read_raster(names[8], ref_treated);
-     #pragma omp section
-          nosewage = read_raster(names[9], ref_nosewage);
+          treated = read_raster(names[8], ref_raster);
      }
      free(names);
-
-     /** parameters from call **/
-     if(argc>1){
-          P1 = atof(argv[1]);
-          parameters[6] = P1;//k
-		printf("k=%g\n", parameters[6]);
-     }
-     if(argc>2){
-          P2 = atof(argv[2]);
-          printf("e=%g\n", P2);
-          parameters[10]=P2;//wwtp removal rate
-     }
-     if(argc>3){
-          P2 = atof(argv[2]);
-          printf("e=%g\n", P2);
-          parameters[11]=P2;//wwtp removal rate
-     }
 
 
      /** 5. running the Contaminant accumulation function **/
      printf("Running contaminant...\n");
-     L0 = initial_contaminant_load(nrows, ncols, parameters[5], consum, population, treated, nosewage, parameters);
-     C = Contaminant_accumulation(L0, direction, hierarchy, nl, runoff, RT, parameters, nrows, ncols);
+     L0 = initial_contaminant_load(nrows, ncols, consum, population, treated, parameters); //initial contaminant load
+     C = Contaminant_accumulation(L0, direction, hierarchy, nl, runoff, RT, parameters, nrows, ncols); //concentration after river attenuation
 
      /** Save result **/
      strcpy(name, dir);
-     if(parameters[9]==1)//concentration
+     if(parameters[10]==1)//concentration
           strcat(name, "results/contaminant_C");
-     if(parameters[9]==0)//load
+     if(parameters[10]==0)//load
           strcat(name, "results/contaminant_L");
-     /*if(argc>1) {
-          strcat(name, "_");
-          snprintf(P, sizeof(P), "%.2f", P1);
-          strcat(name, P);
-     }
-     if(argc>2){
-          strcat(name, "_");
-          snprintf(P, sizeof(P), "%.2f", P2);
-          strcat(name, P);
-     }*/
      strcat(name, ".txt");
      write_raster(name, ref_raster, C);
 
@@ -218,10 +191,10 @@ int main(int argc, char *argv[]){
           free(runoff[i]);
           free(consum[i]);
           free(population[i]);
-          free(wwtp_connection[i]);
+          free(treated[i]);
      }
      free(RT); free(C); free(hierarchy); free(direction); free(runoff);
-     free(consum); free(population); free(wwtp_connection);
+     free(consum); free(population); free(treated);
 
      time_e=time(NULL);
      printf("\nTotal elapsed time %ld s\n\n", time_e-time_i);

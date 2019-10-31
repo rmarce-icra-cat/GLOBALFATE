@@ -52,7 +52,7 @@ void Residence_time_rivers(double **direction, double **slope, double **flow_acc
 
                //no dir
                if(direction[i][j] == 0)
-                    RT[i][j] = (pow(pow(cell_height,2) + pow(cell_width[i],2),0.5) + cell_width[i] + cell_height)/3 / v[i][j]; //this is valid where the flow still rute, especially at the end point of a river (often river mouths were many observation are availables, around 43)
+                    RT[i][j] = pow(cell_height * cell_width[i],0.5) / v[i][j]; //this is valid where the flow still rute, especially at the end point of a river (often river mouths were many observation are availables, around 43)
                //if the flow_acc have being posed to Nan where zero, the previous division
                //should be finite or NaN
 
